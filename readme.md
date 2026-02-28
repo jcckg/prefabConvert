@@ -1,6 +1,6 @@
 # prefabConvert
 
-prefabConvert takes .prefab (and required .meta files) to convert, as it's designed for AssetRipper outputs, therefore it will also need a Unity-style Assets/ project structure (will automatically detect upwards). It will by default export OBJ+MTL, if you want .FBX outputs then just pass `--fbx` and it'll use the blender backend to convert the default outputs (obj/mtl) into an fbx file. 
+prefabConvert takes .prefab (and required .meta files) to convert; as it's designed for AssetRipper outputs, it will therefore also need a Unity-style Assets/ project structure (will automatically detect upwards). It will by default export OBJ+MTL; if you want .FBX outputs then pass `--fbx` and it'll use the blender backend to convert the default outputs (obj/mtl) into an fbx file. 
 
 ```sh
 uv run prefabconvert \
