@@ -10,3 +10,5 @@ uv run prefabconvert \
 ```
 
 If Blender is not auto-detected, pass its absolute binary path w/ `--blender-path`, e.g. `--blender-path /Applications/Blender.app/Contents/MacOS/Blender` or `--blender-path C:\Program Files\Blender Foundation\Blender [Version]\blender.exe`
+
+> This software is not sponsored by or affiliated with Unity Technologies or its affiliates. "Unity" is a registered trademark of Unity Technologies or its affiliates in the U.S. and elsewhere.
