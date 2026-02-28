@@ -1,0 +1,12 @@
+# prefabConvert
+
+prefabConvert takes .prefab (and required .meta files) to convert, as it's designed for AssetRipper outputs, therefore it will also need a Unity-style Assets/ project structure (will automatically detect upwards). It will by default export OBJ+MTL, if you want .FBX outputs then just pass `--fbx` and it'll use the blender backend to convert the default outputs (obj/mtl) into an fbx file. 
+
+```sh
+uv run prefabconvert \
+  --input "/path/to/prefabs" \
+  --output "/path/to/output" \
+  --recursive
+```
+
+If Blender is not auto-detected, pass its absolute binary path w/ `--blender-path`, e.g. `--blender-path /Applications/Blender.app/Contents/MacOS/Blender` or `--blender-path C:\Program Files\Blender Foundation\Blender [Version]\blender.exe`
