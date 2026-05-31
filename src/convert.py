@@ -14,7 +14,6 @@ import yaml
 
 from blender_backend import run_blender_batch
 
-
 IDENTITY4 = np.eye(4, dtype=np.float64)
 
 
@@ -83,8 +82,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Also export FBX files using Blender",
     )
-    parser.add_argument("--limit", type=int, default=0, help="Maximum prefabs to process")
-    parser.add_argument("--start-index", type=int, default=0, help="Start index in sorted prefab list")
+    parser.add_argument(
+        "--limit", type=int, default=0, help="Maximum prefabs to process"
+    )
+    parser.add_argument(
+        "--start-index", type=int, default=0, help="Start index in sorted prefab list"
+    )
     return parser.parse_args()
 
 
@@ -108,7 +111,11 @@ def collect_prefabs(input_path: Path, recursive: bool) -> tuple[list[Path], Path
             raise RuntimeError(f"Expected .prefab file, got: {input_path}")
         return [input_path], input_path.parent
 
-    prefabs = sorted(input_path.rglob("*.prefab")) if recursive else sorted(input_path.glob("*.prefab"))
+    prefabs = (
+        sorted(input_path.rglob("*.prefab"))
+        if recursive
+        else sorted(input_path.glob("*.prefab"))
+    )
     return prefabs, input_path
 
 
@@ -175,7 +182,9 @@ def parse_float(value: object, default: float = 0.0) -> float:
         return default
 
 
-def parse_vec3(data: dict | None, default: tuple[float, float, float]) -> tuple[float, float, float]:
+def parse_vec3(
+    data: dict | None, default: tuple[float, float, float]
+) -> tuple[float, float, float]:
     if not isinstance(data, dict):
         return default
     return (
@@ -220,7 +229,9 @@ def compose_matrix(
     scale: tuple[float, float, float],
 ) -> np.ndarray:
     matrix = np.eye(4, dtype=np.float64)
-    matrix[:3, :3] = quat_to_matrix(rotation) @ np.diag(np.array(scale, dtype=np.float64))
+    matrix[:3, :3] = quat_to_matrix(rotation) @ np.diag(
+        np.array(scale, dtype=np.float64)
+    )
     matrix[:3, 3] = np.array(position, dtype=np.float64)
     return matrix
 
@@ -237,7 +248,9 @@ def parse_prefab_instances(prefab_path: Path) -> list[MeshInstance]:
     for class_id, file_id, data in documents:
         if class_id == 1 and "GameObject" in data:
             payload = data["GameObject"]
-            game_object_names[file_id] = str(payload.get("m_Name", f"GameObject_{file_id}"))
+            game_object_names[file_id] = str(
+                payload.get("m_Name", f"GameObject_{file_id}")
+            )
         elif class_id == 4 and "Transform" in data:
             payload = data["Transform"]
             game_object_id = int(payload.get("m_GameObject", {}).get("fileID", 0))
@@ -245,7 +258,9 @@ def parse_prefab_instances(prefab_path: Path) -> list[MeshInstance]:
             transform = TransformData(
                 game_object_id=game_object_id,
                 parent_transform_id=parent_id,
-                local_position=parse_vec3(payload.get("m_LocalPosition"), (0.0, 0.0, 0.0)),
+                local_position=parse_vec3(
+                    payload.get("m_LocalPosition"), (0.0, 0.0, 0.0)
+                ),
                 local_rotation=parse_quat(payload.get("m_LocalRotation")),
                 local_scale=parse_vec3(payload.get("m_LocalScale"), (1.0, 1.0, 1.0)),
             )
@@ -285,8 +300,13 @@ def parse_prefab_instances(prefab_path: Path) -> list[MeshInstance]:
         transform = transform_by_id.get(transform_id)
         if transform is None:
             return IDENTITY4
-        local = compose_matrix(transform.local_position, transform.local_rotation, transform.local_scale)
-        if transform.parent_transform_id and transform.parent_transform_id in transform_by_id:
+        local = compose_matrix(
+            transform.local_position, transform.local_rotation, transform.local_scale
+        )
+        if (
+            transform.parent_transform_id
+            and transform.parent_transform_id in transform_by_id
+        ):
             result = world_matrix_for_transform(transform.parent_transform_id) @ local
         else:
             result = local
@@ -295,9 +315,9 @@ def parse_prefab_instances(prefab_path: Path) -> list[MeshInstance]:
 
     instances: list[MeshInstance] = []
     for game_object_id, material_guids in renderer_materials_by_game_object.items():
-        mesh_guid = renderer_mesh_by_game_object.get(game_object_id) or mesh_guid_by_game_object.get(
-            game_object_id, ""
-        )
+        mesh_guid = renderer_mesh_by_game_object.get(
+            game_object_id
+        ) or mesh_guid_by_game_object.get(game_object_id, "")
         if not mesh_guid or mesh_guid.startswith("0000000000000000"):
             continue
         transform_id = transform_id_by_game_object.get(game_object_id, 0)
@@ -388,6 +408,16 @@ def decode_vertex_channel(
     return tuple(values)
 
 
+def _synthesise_streams(channels: list[dict]) -> list[dict]:
+    stride = 0
+    for ch in channels:
+        dim = int(ch.get("dimension", 0))
+        fmt = int(ch.get("format", 0))
+        if dim > 0:
+            stride += COMPONENT_SIZE.get(fmt, 4) * dim
+    return [{"offset": 0, "stride": stride}]
+
+
 def decode_mesh_asset(mesh_asset_path: Path) -> MeshData | None:
     raw_text = mesh_asset_path.read_text(encoding="utf-8", errors="ignore")
     documents = parse_unity_yaml_documents(mesh_asset_path)
@@ -403,7 +433,13 @@ def decode_mesh_asset(mesh_asset_path: Path) -> MeshData | None:
     vertex_count = int(vertex_data.get("m_VertexCount", 0))
     channels = vertex_data.get("m_Channels", [])
     streams = vertex_data.get("m_Streams", [])
-    typeless_match = re.search(r"^\s*_typelessdata:\s*([0-9a-fA-F]+)\s*$", raw_text, re.MULTILINE)
+
+    if not streams and channels:
+        streams = _synthesise_streams(channels)
+
+    typeless_match = re.search(
+        r"^\s*_typelessdata:\s*([0-9a-fA-F]+)\s*$", raw_text, re.MULTILINE
+    )
     if typeless_match:
         raw_hex = typeless_match.group(1)
     else:
@@ -414,9 +450,8 @@ def decode_mesh_asset(mesh_asset_path: Path) -> MeshData | None:
 
     positions = np.zeros((vertex_count, 3), dtype=np.float64)
     uvs = np.zeros((vertex_count, 2), dtype=np.float64)
-
     position_channel = channels[0] if len(channels) > 0 else {}
-    uv_channel = channels[3] if len(channels) > 3 else {}
+    uv_channel = channels[4] if len(channels) > 4 else {}
 
     for index in range(vertex_count):
         position = decode_vertex_channel(raw, index, position_channel, streams)
@@ -426,7 +461,9 @@ def decode_mesh_asset(mesh_asset_path: Path) -> MeshData | None:
         if len(uv) >= 2:
             uvs[index] = [uv[0], uv[1]]
 
-    index_match = re.search(r"^\s*m_IndexBuffer:\s*([0-9a-fA-F]+)\s*$", raw_text, re.MULTILINE)
+    index_match = re.search(
+        r"^\s*m_IndexBuffer:\s*([0-9a-fA-F]+)\s*$", raw_text, re.MULTILINE
+    )
     if index_match:
         index_buffer_hex = index_match.group(1)
     else:
@@ -457,13 +494,14 @@ def decode_mesh_asset(mesh_asset_path: Path) -> MeshData | None:
             continue
         first_byte = int(submesh.get("firstByte", 0))
         index_count = int(submesh.get("indexCount", 0))
+        first_vertex = int(submesh.get("firstVertex", 0))
         start = first_byte // bytes_per_index
         sub_indices = indices[start : start + index_count]
         triangles: list[tuple[int, int, int]] = []
         for tri_offset in range(0, len(sub_indices) - 2, 3):
-            a = sub_indices[tri_offset]
-            b = sub_indices[tri_offset + 1]
-            c = sub_indices[tri_offset + 2]
+            a = sub_indices[tri_offset] + first_vertex
+            b = sub_indices[tri_offset + 1] + first_vertex
+            c = sub_indices[tri_offset + 2] + first_vertex
             triangles.append((a, b, c))
         submesh_triangles.append(triangles)
 
@@ -475,7 +513,9 @@ def decode_mesh_asset(mesh_asset_path: Path) -> MeshData | None:
     )
 
 
-def parse_material_file(material_path: Path, guid_index: dict[str, Path]) -> MaterialData:
+def parse_material_file(
+    material_path: Path, guid_index: dict[str, Path]
+) -> MaterialData:
     text = material_path.read_text(encoding="utf-8", errors="ignore")
     lines = text.splitlines()
 
@@ -586,7 +626,9 @@ def write_prefab_obj(
             mtl_file.write(f"Kd {r:.6f} {g:.6f} {b:.6f}\n")
             mtl_file.write(f"d {a:.6f}\n")
             if material.texture_path is not None:
-                relative_texture = os.path.relpath(material.texture_path, output_obj_path.parent)
+                relative_texture = os.path.relpath(
+                    material.texture_path, output_obj_path.parent
+                )
                 mtl_file.write(f"map_Kd {Path(relative_texture).as_posix()}\n")
             mtl_file.write("\n")
 
@@ -610,6 +652,7 @@ def write_prefab_obj(
                 [positions, np.ones((positions.shape[0], 1), dtype=np.float64)], axis=1
             )
             transformed = (homogeneous @ instance.world_matrix.T)[:, :3]
+            transformed[:, 0] *= -1.0
 
             object_name = slug(f"{instance.name}_{instance_index}_{mesh.name}")
             obj_file.write(f"o {object_name}\n")
@@ -627,10 +670,16 @@ def write_prefab_obj(
                     material_guid = instance.material_guids[submesh_index]
                 elif instance.material_guids:
                     material_guid = instance.material_guids[0]
-                material_name = material_name_by_guid.get(material_guid) or material_name_by_guid.get("", "default_mat")
+                material_name = material_name_by_guid.get(
+                    material_guid
+                ) or material_name_by_guid.get("", "default_mat")
                 obj_file.write(f"usemtl {material_name}\n")
                 for a, b, c in triangles:
-                    if a >= len(positions) or b >= len(positions) or c >= len(positions):
+                    if (
+                        a >= len(positions)
+                        or b >= len(positions)
+                        or c >= len(positions)
+                    ):
                         continue
                     va = vertex_offset + a
                     vb = vertex_offset + b
@@ -638,7 +687,9 @@ def write_prefab_obj(
                     ta = uv_offset + a
                     tb = uv_offset + b
                     tc = uv_offset + c
-                    obj_file.write(f"f {va}/{ta} {vb}/{tb} {vc}/{tc}\n")
+                    # Winding order must be reversed (b,a not a,b) to keep
+                    # front-faces outward after the X-axis flip above.
+                    obj_file.write(f"f {va}/{ta} {vc}/{tc} {vb}/{tb}\n")
                     total_faces += 1
 
             vertex_offset += len(positions)
@@ -648,7 +699,9 @@ def write_prefab_obj(
     return total_meshes, total_faces
 
 
-def run_conversion_pipeline(args: argparse.Namespace, input_path: Path, output_path: Path) -> int:
+def run_conversion_pipeline(
+    args: argparse.Namespace, input_path: Path, output_path: Path
+) -> int:
     prefabs, prefab_base = collect_prefabs(input_path, args.recursive)
     if args.start_index:
         prefabs = prefabs[args.start_index :]
@@ -661,7 +714,9 @@ def run_conversion_pipeline(args: argparse.Namespace, input_path: Path, output_p
     assets_root = project_root / "Assets"
 
     if output_path.suffix.lower() == ".fbx":
-        raise RuntimeError("Conversion outputs multiple files. Use an output directory.")
+        raise RuntimeError(
+            "Conversion outputs multiple files. Use an output directory."
+        )
 
     output_path.mkdir(parents=True, exist_ok=True)
     obj_root = output_path / "obj"
